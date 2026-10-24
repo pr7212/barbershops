@@ -182,3 +182,20 @@
     border-right-color: var(--border);
   }
 }
+
+
+/* Custom App styles for SalonFlow */
+.hero {
+  position: relative;
+}
+
+/* Smooth transitions for interactive elements */
+button, a {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Custom focus ring styling for accessibility */
+:focus-visible {
+  outline: 2px solid #653ea8; /* violet-600 */
+  outline-offset: 2px;
+}

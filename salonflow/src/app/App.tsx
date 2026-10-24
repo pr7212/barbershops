@@ -1,8 +1,10 @@
-
 // Import React and useState so we can manage booking state and user inputs
 import React, { useState } from 'react';
 
-// This is our main App component with a fully functional Booking Form!
+// Import our hero image asset from the local assets folder
+import heroImage from '../../assets/hero.png';
+
+// This is our main App component with our stunning hero image and booking form!
 export default function App() {
   // Store what the user types into our form fields
   const [customerName, setCustomerName] = useState('');
@@ -31,29 +33,50 @@ export default function App() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
       
-      {/* Main Container */}
-      <main className="mx-auto max-w-4xl px-4 py-16">
-        
-        {/* Page Title */}
-        <div className="text-center">
-          <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
-            Book Your Appointment ✂️
-          </h1>
-          <p className="mt-2 text-stone-600">
-            Secure your spot in seconds and skip the waiting line.
-          </p>
+      {/* Hero Section with local hero.png background */}
+      <section className="relative overflow-hidden bg-stone-900 text-white">
+        {/* Background Hero Image with a dark overlay */}
+        <div className="absolute inset-0 z-0 opacity-40">
+          <img
+            src={heroImage}
+            alt="Barbershop background"
+            className="h-full w-full object-cover"
+          />
         </div>
 
-        {/* Booking Card */}
-        <div className="mt-10 rounded-3xl bg-white p-8 shadow-xl border border-stone-100">
+        {/* Hero Content */}
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8 lg:py-32">
+          <div className="max-w-2xl">
+            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+              Look sharp. <span className="text-violet-400">Skip the queue.</span>
+            </h1>
+            <p className="mt-4 text-lg text-stone-300">
+              Welcome to SalonFlow! Book your favorite local barbers and manage your appointments seamlessly.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Booking Section */}
+      <main className="mx-auto max-w-4xl px-4 py-16">
+        <div className="rounded-3xl bg-white p-8 shadow-xl border border-stone-100">
           
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-black tracking-tight text-stone-900">
+              Book Your Appointment ✂️
+            </h2>
+            <p className="mt-2 text-stone-600">
+              Secure your spot in seconds and skip the waiting line.
+            </p>
+          </div>
+
           {/* Show a success message if booked, otherwise show the form */}
           {isConfirmed ? (
             <div className="py-12 text-center">
               <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 text-2xl font-bold mb-4">
                 ✓
               </div>
-              <h2 className="text-2xl font-bold text-stone-900">Booking Confirmed!</h2>
+              <h3 className="text-2xl font-bold text-stone-900">Booking Confirmed!</h3>
               <p className="mt-2 text-stone-600">
                 Thanks <span className="font-semibold text-stone-900">{customerName}</span>! Your <span className="font-semibold text-stone-900">{selectedService}</span> is locked in for <span className="font-semibold text-stone-900">{bookingDate}</span> at <span className="font-semibold text-stone-900">{bookingTime}</span>.
               </p>
@@ -148,9 +171,8 @@ export default function App() {
           )}
 
         </div>
-
       </main>
+
     </div>
   );
 }
-

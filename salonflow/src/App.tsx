@@ -1,569 +1,462 @@
-import { useState } from 'react';
+// Import React and useState for managing app state and views
+import React, { useState, useEffect } from 'react';
 
-const services = [
-  {
-    id: 1,
-    name: 'Classic Haircut',
-    category: 'Barbershop',
-    price: 300,
-    duration: 30,
-    icon: '✂️',
-  },
-  {
-    id: 2,
-    name: 'Beard Trim',
-    category: 'Barbershop',
-    price: 150,
-    duration: 15,
-    icon: '🪒',
-  },
-  {
-    id: 3,
-    name: 'Hair Styling',
-    category: 'Salon',
-    price: 800,
-    duration: 60,
-    icon: '💇',
-  },
-  {
-    id: 4,
-    name: 'Braiding',
-    category: 'Salon',
-    price: 1500,
-    duration: 120,
-    icon: '✨',
-  },
-  {
-    id: 5,
-    name: 'Hair Wash',
-    category: 'Salon',
-    price: 400,
-    duration: 30,
-    icon: '🧴',
-  },
-  {
-    id: 6,
-    name: 'Haircut & Beard',
-    category: 'Barbershop',
-    price: 450,
-    duration: 45,
-    icon: '💈',
-  },
-];
+// Import our Supabase client and feature services
+import { serviceService, SalonService } from '../features/services/serviceService';
+import { bookingService, Booking } from '../features/bookings/bookingService';
+import { queueService, QueueItem } from '../features/queue/queueService';
+import { businessService, BusinessProfile } from '../features/businesses/businessService';
 
-const timeSlots = [
-  '09:00 AM',
-  '10:00 AM',
-  '11:00 AM',
-  '12:00 PM',
-  '01:00 PM',
-  '02:00 PM',
-  '03:00 PM',
-  '04:00 PM',
-];
+// Import local hero image asset
+import heroImage from '../../assets/hero.png';
 
-type Booking = {
-  serviceName: string;
-  price: number;
-  date: string;
-  time: string;
-  customerName: string;
-  phone: string;
-};
-
-function App() {
+// This is our main App component uniting all features: Services, Bookings, and Queue
+export default function App() {
+  // Application State
+  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'bookings' | 'queue'>('home');
+  const [business, setBusiness] = useState<BusinessProfile | null>(null);
+  const [services, setServices] = useState<SalonService[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [filter, setFilter] = useState('All');
-  const [selectedService, setSelectedService] = useState<
-    (typeof services)[number] | null
-  >(null);
+  const [loading, setLoading] = useState(true);
 
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+  // Booking Form State
   const [customerName, setCustomerName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [booking, setBooking] = useState<Booking | null>(null);
-  const [error, setError] = useState('');
+  const [selectedService, setSelectedService] = useState('Haircut & Beard Trim');
+  const [bookingDate, setBookingDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('10:00 AM');
+  const [isConfirmed, setIsConfirmed] = useState(false);
 
-  const today = new Date().toLocaleDateString('en-CA');
+  // Walk-in Queue Form State
+  const [walkinName, setWalkinName] = useState('');
+  const [walkinService, setWalkinService] = useState('Classic Haircut');
 
-  const filteredServices =
-    filter === 'All'
-      ? services
-      : services.filter((service) => service.category === filter);
+  // Fetch initial data from Supabase on load
+  useEffect(() => {
+    async function loadAppData() {
+      try {
+        const [bizData, serviceData, bookingData, queueData] = await Promise.all([
+          businessService.getBusinessProfile(),
+          serviceService.getServices(),
+          bookingService.getBookings(),
+          queueService.getQueue(),
+        ]);
 
-  function openBooking(service: (typeof services)[number]) {
-    setSelectedService(service);
-    setDate('');
-    setTime('');
-    setCustomerName('');
-    setPhone('');
-    setError('');
-    setBooking(null);
-  }
+        if (bizData) setBusiness(bizData);
+        if (serviceData) setServices(serviceData);
+        if (bookingData) setBookings(bookingData);
+        if (queueData) setQueue(queueData);
+      } catch (error) {
+        console.error('Error loading app data from Supabase:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-  function submitBooking(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    loadAppData();
+  }, []);
 
-    if (!selectedService || !date || !time) {
-      setError('Please select a date and time.');
+  // Handle booking form submission
+  const handleBookingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerName.trim()) {
+      alert('Please enter your full name!');
       return;
     }
 
-    const [hourText, minuteText] = time.split(':');
-    const hour = Number(hourText);
-    const minute = Number(minuteText.slice(0, 2));
-    const isPM = time.includes('PM');
-    const hour24 = (hour % 12) + (isPM ? 12 : 0);
+    try {
+      const newBooking = await bookingService.createBooking({
+        customer_name: customerName,
+        service_name: selectedService,
+        booking_date: bookingDate || new Date().toISOString().split('T')[0],
+        booking_time: bookingTime,
+        status: 'confirmed',
+      });
 
-    const appointment = new Date(`${date}T00:00:00`);
-    appointment.setHours(hour24, minute, 0, 0);
-
-    if (appointment.getTime() <= Date.now()) {
-      setError('Please choose a future appointment time.');
-      return;
+      setBookings([newBooking, ...bookings]);
+      setIsConfirmed(true);
+    } catch (error) {
+      console.error('Error creating booking:', error);
+      alert('Failed to save booking. Please check your Supabase connection.');
     }
+  };
 
-    setBooking({
-      serviceName: selectedService.name,
-      price: selectedService.price,
-      date,
-      time,
-      customerName,
-      phone,
-    });
+  // Handle adding walk-in customer to queue
+  const handleWalkinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!walkinName.trim()) return;
 
-    setError('');
-  }
+    try {
+      const newItem = await queueService.addToQueue(walkinName, walkinService);
+      setQueue([...queue, newItem]);
+      setWalkinName('');
+      alert(`${walkinName} was successfully added to the queue!`);
+    } catch (error) {
+      console.error('Error adding to queue:', error);
+    }
+  };
 
-  function closeBooking() {
-    setSelectedService(null);
-    setBooking(null);
-    setError('');
+  // Filter services based on category selection
+  const filteredServices = services.filter((service) => {
+    if (filter === 'All') return true;
+    return service.name.toLowerCase().includes(filter.toLowerCase());
+  });
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-stone-50 text-stone-600">
+        <div className="text-center">
+          <div className="text-4xl animate-bounce">✂️</div>
+          <p className="mt-4 font-semibold">Loading SalonFlow...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className='min-h-screen bg-stone-50 text-stone-900'>
-      <header className='sticky top-0 z-20 border-b border-stone-200 bg-white/95 backdrop-blur'>
-        <nav className='mx-auto flex max-w-7xl items-center justify-between px-5 py-4'>
-          <a href='#home' className='text-2xl font-black tracking-tight'>
-            Salon<span className='text-violet-600'>Flow</span>
-          </a>
-
-          <div className='hidden items-center gap-7 text-sm font-medium md:flex'>
-            <a href='#services' className='hover:text-violet-600'>
-              Services
-            </a>
-            <a href='#how-it-works' className='hover:text-violet-600'>
-              How it works
-            </a>
+    <div className="min-h-screen bg-stone-50 text-stone-900 selection:bg-violet-600 selection:text-white">
+      
+      {/* Navigation Bar */}
+      <header className="sticky top-0 z-50 border-b border-stone-200 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 text-xl font-bold text-white shadow-md shadow-violet-200">
+              ✂️
+            </span>
+            <span className="text-xl font-black tracking-tight text-stone-900">
+              {business?.name || 'SalonFlow'}
+            </span>
           </div>
 
-          <a
-            href='#services'
-            className='rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-violet-700'
-          >
-            Book a service
-          </a>
-        </nav>
+          <nav className="flex items-center gap-2 sm:gap-6">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                activeTab === 'home' ? 'bg-violet-50 text-violet-600' : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => setActiveTab('services')}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                activeTab === 'services' ? 'bg-violet-50 text-violet-600' : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              Services
+            </button>
+            <button
+              onClick={() => setActiveTab('bookings')}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                activeTab === 'bookings' ? 'bg-violet-50 text-violet-600' : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              Bookings
+            </button>
+            <button
+              onClick={() => setActiveTab('queue')}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                activeTab === 'queue' ? 'bg-violet-50 text-violet-600' : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              Live Queue
+            </button>
+          </nav>
+        </div>
       </header>
 
+      {/* Main Content Sections */}
       <main>
-        <section id='home' className='relative overflow-hidden bg-white'>
-          <div className='mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 md:grid-cols-2 md:py-24'>
-            <div>
-              <span className='inline-flex rounded-full bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700'>
-                Your time matters
-              </span>
-
-              <h1 className='mt-6 max-w-xl text-4xl font-black leading-tight tracking-tight sm:text-6xl'>
-                Good hair days.
-                <span className='block text-violet-600'>Less waiting.</span>
-              </h1>
-
-              <p className='mt-6 max-w-lg text-lg leading-8 text-stone-600'>
-                Find your next haircut or salon appointment. Choose your
-                service, pick a time and plan your visit with confidence.
-              </p>
-
-              <div className='mt-8 flex flex-wrap gap-3'>
-                <a
-                  href='#services'
-                  className='rounded-xl bg-violet-600 px-6 py-3.5 font-bold text-white transition hover:bg-violet-700'
-                >
-                  Explore services →
-                </a>
-
-                <a
-                  href='#how-it-works'
-                  className='rounded-xl border border-stone-300 px-6 py-3.5 font-bold transition hover:bg-stone-100'
-                >
-                  How it works
-                </a>
+        
+        {/* HOME TAB */}
+        {activeTab === 'home' && (
+          <div>
+            {/* Hero Section */}
+            <section className="relative overflow-hidden bg-stone-900 text-white">
+              <div className="absolute inset-0 z-0 opacity-40">
+                <img
+                  src={heroImage}
+                  alt="Barbershop background"
+                  className="h-full w-full object-cover"
+                />
               </div>
 
-              <div className='mt-9 flex flex-wrap gap-5 text-sm text-stone-600'>
-                <span>✓ Simple booking</span>
-                <span>✓ Clear prices</span>
-                <span>✓ Mobile friendly</span>
+              <div className="relative z-10 mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8 lg:py-32">
+                <div className="max-w-2xl">
+                  <span className="inline-block rounded-full bg-violet-500/20 px-4 py-1.5 text-sm font-bold text-violet-300 backdrop-blur-md mb-6">
+                    {business?.tagline || 'Look sharp. Skip the queue.'}
+                  </span>
+                  <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+                    Premium grooming, <span className="text-violet-400">effortless booking.</span>
+                  </h1>
+                  <p className="mt-4 text-lg text-stone-300">
+                    {business?.address ? `${business.address} • ` : ''} {business?.phone || 'Book your spot in seconds.'}
+                  </p>
+                  
+                  <div className="mt-8 flex flex-wrap gap-4">
+                    <button
+                      onClick={() => setActiveTab('bookings')}
+                      className="rounded-xl bg-violet-600 px-8 py-4 font-bold text-white shadow-lg shadow-violet-600/30 transition hover:bg-violet-700"
+                    >
+                      Book Appointment 🚀
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('services')}
+                      className="rounded-xl border border-stone-700 bg-stone-800/50 px-8 py-4 font-bold text-white backdrop-blur-md transition hover:bg-stone-800"
+                    >
+                      View Service Menu
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div className='relative'>
-              <div className='absolute -inset-5 rounded-[2rem] bg-violet-100 blur-2xl' />
-
-              <img
-                src='https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1100&q=85'
-                alt='Modern barbershop interior'
-                className='relative h-[340px] w-full rounded-3xl object-cover shadow-xl sm:h-[470px]'
-              />
-
-              <div className='absolute bottom-5 left-5 right-5 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-lg backdrop-blur'>
-                <p className='text-xs font-semibold uppercase tracking-widest text-violet-600'>
-                  Your next appointment
-                </p>
-                <p className='mt-1 text-lg font-bold'>
-                  Choose a time that works for you.
-                </p>
-                <p className='mt-1 text-sm text-stone-500'>
-                  Book ahead. Spend less time waiting.
-                </p>
-              </div>
-            </div>
+            </section>
           </div>
-        </section>
+        )}
 
-        <section id='services' className='mx-auto max-w-7xl px-5 py-16'>
-          <div className='flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between'>
-            <div>
-              <p className='font-semibold text-violet-600'>FIND YOUR SERVICE</p>
-              <h2 className='mt-2 text-3xl font-black tracking-tight sm:text-4xl'>
-                What do you need today?
-              </h2>
-              <p className='mt-3 text-stone-600'>
-                Explore our sample service menu and choose what works for you.
-              </p>
+        {/* SERVICES TAB */}
+        {activeTab === 'services' && (
+          <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="font-bold text-violet-600 uppercase tracking-wider text-xs">Our Menu</p>
+                <h2 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">What do you need today?</h2>
+                <p className="mt-2 text-stone-600">Choose from our professional cuts and grooming treatments.</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {['All', 'Haircut', 'Beard', 'Shave'].map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => setFilter(item)}
+                    className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                      filter === item
+                        ? 'bg-violet-600 text-white shadow-md shadow-violet-200'
+                        : 'border border-stone-200 bg-white hover:bg-stone-100 text-stone-700'
+                    }`}
+                  >
+                    {item === 'All' ? 'All Services' : item}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className='flex flex-wrap gap-2'>
-              {['All', 'Salon', 'Barbershop'].map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setFilter(item)}
-                  className={`rounded-full px-4 py-2.5 text-sm font-semibold transition ${
-                    filter === item
-                      ? 'bg-violet-600 text-white'
-                      : 'border border-stone-200 bg-white hover:bg-stone-100'
-                  }`}
-                >
-                  {item === 'All' ? 'All services' : item}
-                </button>
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredServices.map((service) => (
+                <div key={service.id} className="rounded-3xl bg-white p-6 shadow-sm border border-stone-200 flex flex-col justify-between hover:shadow-md transition">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-bold text-stone-900">{service.name}</h3>
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-sm font-bold text-violet-600">
+                        ${service.price}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-stone-600 text-sm leading-relaxed">{service.description}</p>
+                  </div>
+                  
+                  <div className="mt-6 flex items-center justify-between border-t border-stone-100 pt-4">
+                    <span className="text-xs font-semibold text-stone-500">⏱️ {service.duration_minutes} mins</span>
+                    <button
+                      onClick={() => {
+                        setSelectedService(service.name);
+                        setActiveTab('bookings');
+                      }}
+                      className="rounded-xl bg-violet-50 px-4 py-2 text-sm font-bold text-violet-600 transition hover:bg-violet-600 hover:text-white"
+                    >
+                      Book this →
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
+          </section>
+        )}
 
-          <div className='mt-9 grid gap-5 sm:grid-cols-2 lg:grid-cols-3'>
-            {filteredServices.map((service) => (
-              <article
-                key={service.id}
-                className='group rounded-2xl border border-stone-200 bg-white p-6 transition duration-200 hover:-translate-y-1 hover:border-violet-200 hover:shadow-lg'
-              >
-                <div className='flex items-start justify-between'>
-                  <div className='flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-50 text-2xl'>
-                    {service.icon}
+        {/* BOOKINGS TAB */}
+        {activeTab === 'bookings' && (
+          <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+            <div className="rounded-3xl bg-white p-8 sm:p-12 shadow-xl border border-stone-200">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-black tracking-tight">Book Your Appointment ✂️</h2>
+                <p className="mt-2 text-stone-600">Secure your spot in seconds and skip the waiting line.</p>
+              </div>
+
+              {isConfirmed ? (
+                <div className="py-8 text-center">
+                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 text-2xl font-bold mb-4">
+                    ✓
+                  </div>
+                  <h3 className="text-2xl font-bold text-stone-900">Booking Confirmed!</h3>
+                  <p className="mt-2 text-stone-600">
+                    Thanks <span className="font-semibold text-stone-900">{customerName}</span>! Your <span className="font-semibold text-stone-900">{selectedService}</span> is locked in for <span className="font-semibold text-stone-900">{bookingDate}</span> at <span className="font-semibold text-stone-900">{bookingTime}</span>.
+                  </p>
+                  
+                  <button
+                    onClick={() => {
+                      setIsConfirmed(false);
+                      setCustomerName('');
+                    }}
+                    className="mt-8 rounded-xl bg-violet-600 px-6 py-3 font-bold text-white transition hover:bg-violet-700"
+                  >
+                    Book another appointment
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleBookingSubmit} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-stone-700">Full Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Prince Developer"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-3 text-stone-900 focus:border-violet-600 focus:outline-none"
+                      required
+                    />
                   </div>
 
-                  <span className='rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600'>
-                    {service.category}
+                  <div>
+                    <label className="block text-sm font-semibold text-stone-700">Choose Service</label>
+                    <select
+                      value={selectedService}
+                      onChange={(e) => setSelectedService(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-3 text-stone-900 focus:border-violet-600 focus:outline-none bg-white"
+                    >
+                      {services.map((s) => (
+                        <option key={s.id} value={s.name}>
+                          {s.name} (${s.price})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700">Preferred Date</label>
+                      <input
+                        type="date"
+                        value={bookingDate}
+                        onChange={(e) => setBookingDate(e.target.value)}
+                        className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-3 text-stone-900 focus:border-violet-600 focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700">Preferred Time</label>
+                      <select
+                        value={bookingTime}
+                        onChange={(e) => setBookingTime(e.target.value)}
+                        className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-3 text-stone-900 focus:border-violet-600 focus:outline-none bg-white"
+                      >
+                        <option value="09:00 AM">09:00 AM</option>
+                        <option value="10:00 AM">10:00 AM</option>
+                        <option value="11:30 AM">11:30 AM</option>
+                        <option value="02:00 PM">02:00 PM</option>
+                        <option value="04:00 PM">04:00 PM</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-xl bg-violet-600 py-4 font-bold text-white transition hover:bg-violet-700 shadow-lg shadow-violet-200"
+                  >
+                    Confirm Booking 🚀
+                  </button>
+                </form>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* QUEUE TAB */}
+        {activeTab === 'queue' && (
+          <section className="mx-auto max-w-4xl px-4 py-16 sm:px-6">
+            <div className="grid gap-8 lg:grid-cols-3">
+              
+              {/* Add to Queue Form */}
+              <div className="rounded-3xl bg-white p-6 shadow-sm border border-stone-200 h-fit">
+                <h3 className="text-xl font-bold text-stone-900 mb-4">Join Walk-in Queue</h3>
+                <form onSubmit={handleWalkinSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-600 mb-1">Your Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., John Doe"
+                      value={walkinName}
+                      onChange={(e) => setWalkinName(e.target.value)}
+                      className="w-full rounded-xl border border-stone-300 px-3 py-2 text-sm focus:border-violet-600 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-600 mb-1">Service</label>
+                    <select
+                      value={walkinService}
+                      onChange={(e) => setWalkinService(e.target.value)}
+                      className="w-full rounded-xl border border-stone-300 px-3 py-2 text-sm focus:border-violet-600 focus:outline-none bg-white"
+                    >
+                      {services.map((s) => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700"
+                  >
+                    Get Queue Ticket 🎟️
+                  </button>
+                </form>
+              </div>
+
+              {/* Active Queue Display */}
+              <div className="lg:col-span-2 rounded-3xl bg-white p-8 shadow-sm border border-stone-200">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-black">Live Queue Status</h2>
+                  <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                    {queue.length} in line
                   </span>
                 </div>
 
-                <h3 className='mt-5 text-xl font-bold'>{service.name}</h3>
-
-                <p className='mt-2 text-sm text-stone-500'>
-                  Approx. {service.duration} minutes
-                </p>
-
-                <div className='mt-6 flex items-center justify-between border-t border-stone-100 pt-5'>
-                  <div>
-                    <p className='text-xs text-stone-500'>Starting at</p>
-                    <p className='mt-1 text-2xl font-black'>
-                      KSh {service.price.toLocaleString('en-KE')}
-                    </p>
+                {queue.length === 0 ? (
+                  <p className="text-stone-500 py-12 text-center text-sm">No one is currently in line. Be the first to join!</p>
+                ) : (
+                  <div className="space-y-4">
+                    {queue.map((item, index) => (
+                      <div key={item.id} className="flex items-center justify-between rounded-2xl border border-stone-100 bg-stone-50 p-4">
+                        <div className="flex items-center gap-4">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 font-bold text-white text-sm">
+                            #{index + 1}
+                          </span>
+                          <div>
+                            <h4 className="font-bold text-stone-900">{item.customer_name}</h4>
+                            <p className="text-xs text-stone-500">{item.service_name}</p>
+                          </div>
+                        </div>
+                        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800 capitalize">
+                          {item.status}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+                )}
+              </div>
 
-                  <button
-                    onClick={() => openBooking(service)}
-                    className='rounded-xl bg-stone-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-violet-600'
-                  >
-                    Book now
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <p className='mt-6 text-sm text-stone-500'>
-            Demo prices only. Actual services and prices will come from
-            participating businesses.
-          </p>
-        </section>
-
-        <section
-          id='how-it-works'
-          className='border-y border-stone-200 bg-white py-16'
-        >
-          <div className='mx-auto max-w-7xl px-5'>
-            <div className='mx-auto max-w-2xl text-center'>
-              <p className='font-semibold text-violet-600'>SIMPLE BY DESIGN</p>
-              <h2 className='mt-2 text-3xl font-black sm:text-4xl'>
-                Your appointment in three steps
-              </h2>
             </div>
+          </section>
+        )}
 
-            <div className='mt-10 grid gap-6 md:grid-cols-3'>
-              {[
-                {
-                  number: '01',
-                  title: 'Choose a service',
-                  description:
-                    'Find the service you need and see its sample price and duration.',
-                },
-                {
-                  number: '02',
-                  title: 'Pick a time',
-                  description:
-                    'Select a preferred date and time and enter your contact details.',
-                },
-                {
-                  number: '03',
-                  title: 'Get confirmation',
-                  description:
-                    'Review your booking details before visiting your chosen business.',
-                },
-              ].map((step) => (
-                <div key={step.number} className='rounded-2xl bg-stone-50 p-7'>
-                  <p className='text-3xl font-black text-violet-600'>
-                    {step.number}
-                  </p>
-                  <h3 className='mt-4 text-xl font-bold'>{step.title}</h3>
-                  <p className='mt-3 leading-7 text-stone-600'>
-                    {step.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       </main>
 
-      <footer className='bg-stone-950 px-5 py-8 text-white'>
-        <div className='mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-          <p className='text-xl font-black'>
-            Salon<span className='text-violet-400'>Flow</span>
-          </p>
-          <p className='text-sm text-stone-400'>
-            Built for Nairobi's salons and barbershops.
-          </p>
-        </div>
+      {/* Footer */}
+      <footer className="mt-20 border-t border-stone-200 bg-white py-8 text-center text-sm text-stone-500">
+        <p>© {new Date().getFullYear()} {business?.name || 'SalonFlow'}. All rights reserved.</p>
       </footer>
 
-      {selectedService && (
-        <div
-          className='fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-stone-950/60 p-4'
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeBooking();
-          }}
-        >
-          <div
-            role='dialog'
-            aria-modal='true'
-            aria-labelledby='booking-title'
-            className='my-auto w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8'
-          >
-            {booking ? (
-              <div>
-                <div className='flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl text-green-700'>
-                  ✓
-                </div>
-
-                <h2 className='mt-5 text-2xl font-black'>
-                  Demo booking created!
-                </h2>
-
-                <p className='mt-2 text-stone-600'>
-                  {booking.customerName}, review your appointment details. This
-                  is a local demonstration, not a confirmed booking with a real
-                  business.
-                </p>
-
-                <div className='mt-6 space-y-3 rounded-2xl bg-stone-50 p-5'>
-                  <p>
-                    <span className='text-stone-500'>Service:</span>{' '}
-                    <strong>{booking.serviceName}</strong>
-                  </p>
-                  <p>
-                    <span className='text-stone-500'>Date:</span>{' '}
-                    <strong>{booking.date}</strong>
-                  </p>
-                  <p>
-                    <span className='text-stone-500'>Time:</span>{' '}
-                    <strong>{booking.time}</strong>
-                  </p>
-                  <p>
-                    <span className='text-stone-500'>Phone:</span>{' '}
-                    <strong>{booking.phone}</strong>
-                  </p>
-                  <p className='border-t border-stone-200 pt-3 text-lg'>
-                    Total:{' '}
-                    <strong>KSh {booking.price.toLocaleString('en-KE')}</strong>
-                  </p>
-                </div>
-
-                <button
-                  onClick={closeBooking}
-                  className='mt-6 w-full rounded-xl bg-violet-600 px-5 py-3 font-bold text-white hover:bg-violet-700'
-                >
-                  Back to services
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className='flex items-start justify-between gap-4'>
-                  <div>
-                    <p className='text-sm font-semibold text-violet-600'>
-                      YOUR APPOINTMENT
-                    </p>
-                    <h2 id='booking-title' className='mt-2 text-2xl font-black'>
-                      Book {selectedService.name}
-                    </h2>
-                    <p className='mt-2 text-sm text-stone-500'>
-                      KSh {selectedService.price.toLocaleString('en-KE')}
-                      {' · '}
-                      {selectedService.duration} minutes
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={closeBooking}
-                    aria-label='Close booking form'
-                    className='rounded-lg px-3 py-2 text-xl hover:bg-stone-100'
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <form onSubmit={submitBooking} className='mt-6 space-y-4'>
-                  <div>
-                    <label
-                      htmlFor='customer-name'
-                      className='mb-2 block text-sm font-semibold'
-                    >
-                      Your name
-                    </label>
-                    <input
-                      id='customer-name'
-                      required
-                      minLength={2}
-                      maxLength={100}
-                      autoComplete='name'
-                      value={customerName}
-                      onChange={(event) => setCustomerName(event.target.value)}
-                      placeholder='Enter your name'
-                      className='w-full rounded-xl border border-stone-300 px-4 py-3 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100'
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor='customer-phone'
-                      className='mb-2 block text-sm font-semibold'
-                    >
-                      Phone number
-                    </label>
-                    <input
-                      id='customer-phone'
-                      required
-                      type='tel'
-                      autoComplete='tel'
-                      maxLength={20}
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                      placeholder='e.g. 0712345678'
-                      className='w-full rounded-xl border border-stone-300 px-4 py-3 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100'
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor='appointment-date'
-                      className='mb-2 block text-sm font-semibold'
-                    >
-                      Appointment date
-                    </label>
-                    <input
-                      id='appointment-date'
-                      type='date'
-                      required
-                      min={today}
-                      value={date}
-                      onChange={(event) => {
-                        setDate(event.target.value);
-                        setTime('');
-                      }}
-                      className='w-full rounded-xl border border-stone-300 px-4 py-3 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100'
-                    />
-                  </div>
-
-                  <fieldset>
-                    <legend className='mb-3 text-sm font-semibold'>
-                      Preferred time
-                    </legend>
-                    <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
-                      {timeSlots.map((slot) => (
-                        <button
-                          key={slot}
-                          type='button'
-                          onClick={() => setTime(slot)}
-                          className={`rounded-xl border px-2 py-3 text-sm font-semibold transition ${
-                            time === slot
-                              ? 'border-violet-600 bg-violet-600 text-white'
-                              : 'border-stone-200 hover:border-violet-400'
-                          }`}
-                        >
-                          {slot}
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
-
-                  {error && (
-                    <p
-                      role='alert'
-                      className='text-sm font-medium text-red-600'
-                    >
-                      {error}
-                    </p>
-                  )}
-
-                  <button
-                    type='submit'
-                    className='w-full rounded-xl bg-violet-600 px-5 py-3.5 font-bold text-white transition hover:bg-violet-700'
-                  >
-                    Review booking
-                  </button>
-
-                  <p className='text-center text-xs leading-5 text-stone-500'>
-                    Demo only. Availability is not checked against a real
-                    business, and bookings are not saved permanently.
-                  </p>
-                </form>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-
-export default App;
